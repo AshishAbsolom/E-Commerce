@@ -17,7 +17,7 @@ export default function Welcome() {
         </h1>
 
         {/* Button */}
-        <Link to="/products" className="mt-10">
+        <Link to="/Alana" className="mt-10">
           <Button
             size="lg"
             className="bg-blue-500 hover:bg-blue-600 text-white px-10 py-4 text-lg font-semibold rounded-full shadow-md transition-transform transform hover:scale-105"
