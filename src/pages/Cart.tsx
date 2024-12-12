@@ -62,8 +62,7 @@ export default function Cart() {
             <div class="container">
               <h1>Thank You for Your Gift!</h1>
               <p>
-                Your generous gift means a lot to us.<br>
-                We appreciate your support!
+                Your order has been placed successfully!
               </p>
             </div>
           </body>
