@@ -3,72 +3,68 @@ import { useNavigate } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
 import { useCart } from "../store/CartContext";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { CartItem } from "@/components/cart/CartItem";
-import { CheckoutDialog } from "@/components/cart/CheckoutDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 export default function Cart() {
   const { items, removeFromCart, clearCart } = useCart();
   const navigate = useNavigate();
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    specialNote: "",
+  });
 
   const totalPrice = items.reduce((sum, item) => sum + item.price, 0);
 
-  const handleOrderSuccess = () => {
-    setIsCheckoutOpen(false);
-    const thankYouWindow = window.open('', '_blank', 'width=800,height=600');
-    if (thankYouWindow) {
-      thankYouWindow.document.write(`
-        <html>
-          <head>
-            <style>
-              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-              body {
-                margin: 0;
-                font-family: 'Inter', sans-serif;
-                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-                height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
-              .container {
-                background: white;
-                padding: 4rem;
-                border-radius: 2rem;
-                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-                text-align: center;
-                max-width: 600px;
-                animation: fadeIn 0.5s ease-out;
-              }
-              @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(20px); }
-                to { opacity: 1; transform: translateY(0); }
-              }
-              h1 {
-                color: #0f172a;
-                font-size: 2.5rem;
-                margin-bottom: 2rem;
-                font-weight: 700;
-              }
-              p {
-                color: #475569;
-                font-size: 1.5rem;
-                line-height: 1.6;
-                margin: 0;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>Thank You for Your Gift!</h1>
-              <p>
-                Your order has been placed successfully!
-              </p>
-            </div>
-          </body>
-        </html>
-      `);
+  const handleCheckout = async () => {
+    try {
+      setIsSubmitting(true);
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          user_name: `${formData.firstName} ${formData.lastName}`,
+          total_price: totalPrice,
+          special_note: formData.specialNote,
+          items: items.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price
+          }))
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      if (!order) throw new Error("No order was created");
+
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({ is_gifted: true })
+        .in(
+          "id",
+          items.map((item) => item.id)
+        );
+
+      if (updateError) throw updateError;
+
       clearCart();
+      console.log('Navigating to thank you page');
+      navigate('/thank-you');
+    } catch (error) {
+      console.error("Error placing order:", error);
+      toast({
+        title: "Error",
+        description: "There was an error placing your order. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -90,47 +86,81 @@ export default function Cart() {
   }
 
   return (
-    <>
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8 mt-16">
-          <h2 className="text-2xl font-bold mb-6">Your Cart</h2>
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-4">
-              {items.map((item) => (
-                <CartItem
-                  key={item.id}
-                  item={item}
-                  onRemove={removeFromCart}
-                />
-              ))}
-            </div>
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <Navbar />
+      <div className="container mx-auto px-4 py-8 mt-16">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-2xl font-bold mb-6">Your Cart</h2>
+            {items.map((item) => (
+              <CartItem
+                key={item.id}
+                item={item}
+                onRemove={removeFromCart}
+              />
+            ))}
+          </div>
 
-            <div className="bg-white rounded-xl p-6 h-fit">
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white rounded-xl p-6">
               <div className="flex justify-between mb-4">
                 <span className="font-medium">Total:</span>
                 <span className="text-accent font-bold">
                   ${totalPrice.toFixed(2)}
                 </span>
               </div>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 space-y-4">
+              <h3 className="text-xl font-bold">Complete Your Gift</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">First Name</label>
+                  <Input
+                    placeholder="Enter your first name"
+                    value={formData.firstName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, firstName: e.target.value })
+                    }
+                    className="rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Last Name</label>
+                  <Input
+                    placeholder="Enter your last name"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lastName: e.target.value })
+                    }
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Special Note (Optional)
+                </label>
+                <Textarea
+                  placeholder="Add a special note for the family..."
+                  value={formData.specialNote}
+                  onChange={(e) =>
+                    setFormData({ ...formData, specialNote: e.target.value })
+                  }
+                  className="min-h-[100px] rounded-xl"
+                />
+              </div>
               <Button
-                className="w-full bg-accent hover:bg-accent/90"
-                onClick={() => setIsCheckoutOpen(true)}
+                className="w-full bg-accent hover:bg-accent/90 py-6 text-lg"
+                onClick={handleCheckout}
+                disabled={!formData.firstName || !formData.lastName || isSubmitting}
               >
-                Proceed to Checkout
+                {isSubmitting ? "Processing..." : "Confirm Gift"}
               </Button>
             </div>
           </div>
         </div>
       </div>
-
-      <CheckoutDialog
-        items={items}
-        totalPrice={totalPrice}
-        onSuccess={handleOrderSuccess}
-        open={isCheckoutOpen}
-        onOpenChange={setIsCheckoutOpen}
-      />
-    </>
+    </div>
   );
 }
